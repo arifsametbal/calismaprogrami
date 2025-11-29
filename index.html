@@ -346,7 +346,6 @@
             const selectedDateKey = computed(() => formatDateKey(selectedDate.value));
             
             // 0 OLANLARI GİZLE (SİLİNMİŞ GİBİ GÖSTER)
-            // Hem listelerden hem grafiklerden anında silinir.
             const dailyActivities = computed(() => activityLog.value.filter(l => l.date === selectedDateKey.value && Number(l.minutes) > 0));
             const dailyTests = computed(() => testRecords.value.filter(t => t.date === selectedDateKey.value && Number(t.total) > 0));
             
@@ -390,7 +389,7 @@
             const toggleEditMode = () => {
                 editMode.value = !editMode.value;
                 if(!editMode.value) {
-                    // Düzenleme modu kapanınca ayarları (Başlık) kaydet
+                    // Düzenleme modu kapanınca ayarları (Başlık ve Rutinleri) kaydet
                     saveSettings();
                 }
             };
@@ -435,10 +434,26 @@
                     reader.readAsDataURL(file);
                 }
             };
-            const addNewActivity = () => { activities.value.push({ id: 'act_' + Date.now(), label: 'Yeni', icon: 'fa-star', color: 'bg-gray-200' }); };
-            const removeActivity = (index) => { if(confirm('Silmek istiyor musunuz?')) activities.value.splice(index, 1); };
-            const addSubject = () => subjects.value.push('Yeni Ders');
-            const removeSubject = (index) => { if(confirm('Silmek istiyor musunuz?')) subjects.value.splice(index, 1); };
+            const addNewActivity = () => { 
+                activities.value.push({ id: 'act_' + Date.now(), label: 'Yeni', icon: 'fa-star', color: 'bg-gray-200' });
+                saveSettings();
+            };
+            const removeActivity = (index) => { 
+                if(confirm('Silmek istiyor musunuz?')) {
+                    activities.value.splice(index, 1);
+                    saveSettings();
+                }
+            };
+            const addSubject = () => {
+                subjects.value.push('Yeni Ders');
+                saveSettings();
+            };
+            const removeSubject = (index) => { 
+                if(confirm('Silmek istiyor musunuz?')) {
+                    subjects.value.splice(index, 1); 
+                    saveSettings();
+                }
+            };
             
             // YÖNETİCİ GİRİŞİ
             const toggleAdminLogin = () => {
@@ -469,6 +484,8 @@
                         const latestSettings = settingsLog[settingsLog.length - 1]; // En sonuncusu
                         if (latestSettings.appTitle) appTitle.value = latestSettings.appTitle;
                         if (latestSettings.profileImage) profileImage.value = latestSettings.profileImage;
+                        if (latestSettings.activities) activities.value = latestSettings.activities;
+                        if (latestSettings.subjects) subjects.value = latestSettings.subjects;
                     }
                     
                 } catch(err) { console.error(err); } 
@@ -491,12 +508,14 @@
                 finally { loading.value = false; }
             };
 
-            // AYARLARI KAYDET (Başlık ve Resim)
+            // AYARLARI KAYDET (Başlık, Resim, Rutinler, Dersler)
             const saveSettings = () => {
                 const payload = {
                     dataType: 'settings',
                     appTitle: appTitle.value,
-                    profileImage: profileImage.value
+                    profileImage: profileImage.value,
+                    activities: activities.value,
+                    subjects: subjects.value
                 };
                 sendDataToGoogle(payload);
             };
