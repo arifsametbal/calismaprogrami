@@ -387,18 +387,51 @@
             watch([dailyActivities, activeTab], () => { if(activeTab.value === 'rutin') nextTick(renderPieChart); }, { deep: true });
             watch([filteredRecords, activeTab, chartSubject], () => { if(activeTab.value === 'ders') nextTick(renderLineChart); }, { deep: true });
 
-            const toggleEditMode = () => editMode.value = !editMode.value;
+            const toggleEditMode = () => {
+                editMode.value = !editMode.value;
+                if(!editMode.value) {
+                    // Düzenleme modu kapanınca ayarları (Başlık) kaydet
+                    saveSettings();
+                }
+            };
             const selectDate = (date) => selectedDate.value = date;
             const changeWeek = (dir) => { const d = new Date(selectedDate.value); d.setDate(d.getDate() + (dir * 7)); selectedDate.value = d; };
             const formatDateDisplay = (date) => date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
             const isSelected = (d) => formatDateKey(d) === selectedDateKey.value;
             const onManualDateChange = (e) => { if(e.target.value) selectedDate.value = new Date(e.target.value); };
-            const triggerFileUpload = () => document.querySelector('input[type=file]').click();
+            
+            const triggerFileUpload = () => {
+                if(editMode.value) document.querySelector('input[type=file]').click();
+                else alert("Fotoğraf değiştirmek için önce düzenleme (kalem) ikonuna basmalısın.");
+            };
+            
             const onFileSelected = (e) => {
                 const file = e.target.files[0];
                 if(file) {
                     const reader = new FileReader();
-                    reader.onload = (e) => { profileImage.value = e.target.result; localStorage.setItem('ikra_profile_pic', e.target.result); };
+                    reader.onload = (event) => { 
+                        // Resmi sıkıştır (Google Sheets hücresine sığması için)
+                        const img = new Image();
+                        img.src = event.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            // Maksimum 150px genişlik (Avatar için yeterli ve veri tasarrufu sağlar)
+                            const MAX_WIDTH = 150;
+                            const scaleSize = MAX_WIDTH / img.width;
+                            canvas.width = MAX_WIDTH;
+                            canvas.height = img.height * scaleSize;
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            
+                            // Düşük kalite JPEG olarak kaydet
+                            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
+                            profileImage.value = compressedBase64; 
+                            localStorage.setItem('ikra_profile_pic', compressedBase64);
+                            
+                            // Hemen sunucuya gönder
+                            saveSettings();
+                        };
+                    };
                     reader.readAsDataURL(file);
                 }
             };
@@ -426,9 +459,17 @@
                     const res = await fetch(GOOGLE_SCRIPT_URL);
                     const data = await res.json();
                     
-                    // BURADA TEMİZLİK YAPIYORUZ: 0 veya geçersiz olanları listeye hiç alma
+                    // Veri Tiplerini Ayır
                     activityLog.value = data.filter(item => item.dataType === 'activity' && Number(item.minutes) > 0);
                     testRecords.value = data.filter(item => item.dataType === 'test' && Number(item.total) > 0);
+                    
+                    // Ayarları Yükle (En son kaydedilen ayarı al)
+                    const settingsLog = data.filter(item => item.dataType === 'settings');
+                    if (settingsLog.length > 0) {
+                        const latestSettings = settingsLog[settingsLog.length - 1]; // En sonuncusu
+                        if (latestSettings.appTitle) appTitle.value = latestSettings.appTitle;
+                        if (latestSettings.profileImage) profileImage.value = latestSettings.profileImage;
+                    }
                     
                 } catch(err) { console.error(err); } 
                 finally { loading.value = false; nextTick(() => { if(activeTab.value === 'rutin') renderPieChart(); if(activeTab.value === 'ders') renderLineChart(); }); }
@@ -448,6 +489,16 @@
                     });
                 } catch(err) { alert("Sunucu hatası!"); } 
                 finally { loading.value = false; }
+            };
+
+            // AYARLARI KAYDET (Başlık ve Resim)
+            const saveSettings = () => {
+                const payload = {
+                    dataType: 'settings',
+                    appTitle: appTitle.value,
+                    profileImage: profileImage.value
+                };
+                sendDataToGoogle(payload);
             };
 
             // DÜZENLEME VE SİLME FONKSİYONLARI
@@ -593,7 +644,7 @@
             return {
                 loading, appTitle, showWelcome, activeTab, selectedDate, profileImage, editMode,
                 isAdmin, showLoginModal, loginPassword, toggleAdminLogin, performLogin, deleteLog, editLog,
-                editingId, cancelEdit,
+                editingId, cancelEdit, saveSettings,
                 weekDays, changeWeek, selectDate, isSelected, formatDateDisplay,
                 activities, subjects, iconOptions, activityLog, testRecords, dailyActivities, dailyTests,
                 triggerFileUpload, onFileSelected, addNewActivity, removeActivity, addSubject, removeSubject,
